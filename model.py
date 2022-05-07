@@ -101,7 +101,7 @@ class MODEL(nn.Module):
         self.LN = nn.LayerNorm(self.d_model) 
         self.fcHln = nn.Linear(self.d_model * 3, self.d_model) 
     def forward(self, x, xb, xn, x_input, x_len, xa, src_mask):
-        #========================
+
         length = x_len
         input_sequence = x_input
         b, s = input_sequence.size()
@@ -120,10 +120,9 @@ class MODEL(nn.Module):
         output = output.view(b, s, self.vocab_size)
         logp = output
 
-        #========================
         hE = self.emb_a(xa) #[B, amenity_len, latent_size]
         hE = self.fcE1(hE)
-        #========================
+
         hN = self.fcN1(x)
         hN = self.fcN2(hN)
 
