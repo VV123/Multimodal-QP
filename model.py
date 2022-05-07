@@ -50,14 +50,8 @@ class MODEL(nn.Module):
 
         self.max_sequence_length = 50
 
-        latent_size1 = 32
-        # rnn parameters
-        self.rnn_type = 'gru'
-        self.bidirectional = False
-        self.num_layers = 1
-        self.hidden_size = 64
         # embedding
-        self.embedding_size = 768 #300
+        self.embedding_size = 768 
         self.d_model = self.embedding_size 
 
         bertmodel = BertModel.from_pretrained('bert-base-uncased')
@@ -65,30 +59,6 @@ class MODEL(nn.Module):
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         self.embedding = bertmodel.embeddings
 
-        self.dropout_p = 0.5
-
-   
-
-        if self.rnn_type == 'rnn':
-            rnn = nn.RNN
-        elif self.rnn_type == 'gru':
-            rnn = nn.GRU
-        else:
-            raise ValueError()
-
-        self.encoder_rnn = rnn(self.embedding_size, self.hidden_size, num_layers=self.num_layers, bidirectional=self.bidirectional, batch_first=True)
-        self.decoder_rnn = rnn(self.embedding_size, self.hidden_size, num_layers=self.num_layers, bidirectional=self.bidirectional, batch_first=True)
-
-        self.hidden_factor = (2 if self.bidirectional else 1) * self.num_layers
-
-        self.outputs2vocab = nn.Linear(self.embedding_size, self.vocab_size)
-        #=============================[Attention]
-        self.attn = nn.Linear(self.hidden_size*self.hidden_factor + self.embedding_size, 1)
-        self.attn_combine = nn.Linear(self.hidden_size*self.hidden_factor + self.embedding_size, self.embedding_size)
-        self.dropout = nn.Dropout(self.dropout_p)
-
-        
-        #=============================
         # Neighborhood Embedding
         self.latent_size = latent_size
         self.emb_tokens = nn.Embedding(5, self.d_model)
@@ -98,22 +68,18 @@ class MODEL(nn.Module):
         #Amenity Embedding
         self.emb_a = nn.Embedding(100, self.latent_size, padding_idx=0)
 
-
         self.fcN1 = nn.Linear(8, self.d_model)
         self.fcN2 = nn.Linear(self.d_model, self.d_model * 40)
         
-        self.fc2 = nn.Linear(self.d_model, latent_size) #ablation
+        self.fc1 = nn.Linear(self.d_model, latent_size) 
+        self.fc2 = nn.Linear(latent_size, 1)
         
-        self.fc3 = nn.Linear(latent_size, 1)
         self.fcT = nn.Linear(self.embedding_size, self.latent_size)
+        
         self.fcE1 = nn.Linear(latent_size, self.d_model)
 
         self.fcL1 = nn.Linear(latent_size, self.d_model)
         self.fcL2 = nn.Linear(self.d_model, self.d_model * 30)
-
-        self.fc7 = nn.Linear(latent_size, latent_size1, bias=False) # for attention
-        self.fc8 = nn.Linear(latent_size1, 1, bias=False)
-        self.fc9 = nn.Linear(latent_size1, 1, bias=False)
 
         self.act = nn.Sigmoid()
 
@@ -160,10 +126,8 @@ class MODEL(nn.Module):
         #========================
         hN = self.fcN1(x)
         hN = self.fcN2(hN)
-        
-        h31 = self.emb_b(xb) + self.emb_n(xn)
 
-        hL = self.fcL1(self.emb_b(xb))
+        hL = self.fcL1(self.emb_b(xb) + self.emb_n(xn))
         hL = self.fcL2(hL)
 
         hT = mid_hidden
@@ -176,9 +140,9 @@ class MODEL(nn.Module):
         hNL = self.LN(hNL).view(-1, self.d_model * 3)
         hNL = self.fcHln(hNL) 
 
-        h7 = F.relu(self.fc2(hT + hNL))
-        h8 = self.fc3(h7)
-        return self.act(h8), logp, hT, hNL
+        h1 = F.relu(self.fc1(hT + hNL))
+        h2 = self.fc2(h1)
+        return self.act(h2), logp, hT, hNL
 
 class MILNCELoss(torch.nn.Module):
     def __init__(self):
