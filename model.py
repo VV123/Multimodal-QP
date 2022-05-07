@@ -132,7 +132,6 @@ class MODEL(nn.Module):
 
         hT = mid_hidden
 
-        SEP_token = 0
         h6 = torch.cat((self.emb_tokens(torch.tensor([0]*b).view(-1, 1).cuda()), hL.view(-1, 30, self.d_model), self.emb_tokens(torch.tensor([1]*b).view(-1, 1).cuda()), hN.view(-1, 40, self.d_model), self.emb_tokens(torch.tensor([2]*b).view(-1, 1).cuda()), hE.view(-1, 30, self.d_model)), 1)
         h6 = self.transformer_encoder1(h6, None)
         h6 = h6.view(b, 103, self.d_model)
