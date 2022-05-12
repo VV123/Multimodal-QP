@@ -197,7 +197,6 @@ if __name__ == '__main__':
     arg_parser.add_argument("--amenLen", default=100, type=int)
     args = arg_parser.parse_args()
 
-    print('=== [final] shared Transformer. support query search====')
     criterion = MSELoss()
     criterion = L1Loss()
     nce_criterion = MILNCELoss()
