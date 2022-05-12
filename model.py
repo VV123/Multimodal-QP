@@ -124,22 +124,22 @@ class MODEL(nn.Module):
         output = output.view(b, s, self.vocab_size)
         logp = output
 
-        hE = self.emb_a(xa) #[B, amenity_len, latent_size]
+        hE = self.emb_a(xa) 
         hE = self.fcE1(hE)
         hN = self.fcN1(x)
         hN = self.fcN2(hN)
         hL = self.fcL1(self.emb_b(xb) + self.emb_n(xn))
         hL = self.fcL2(hL)
-        hT = mid_hidden
-        h6 = torch.cat((self.emb_tokens(torch.tensor([0]*b).view(-1, 1).cuda()), hL.view(-1, 30, self.d_model), self.emb_tokens(torch.tensor([1]*b).view(-1, 1).cuda()), hN.view(-1, 40, self.d_model), self.emb_tokens(torch.tensor([2]*b).view(-1, 1).cuda()), hE.view(-1, 30, self.d_model)), 1)
-        h6 = self.transformer_encoder1(h6, None)
-        h6 = h6.view(b, 103, self.d_model)
-        hNL = torch.concat((h6[:, 0].unsqueeze(1), h6[:, 31].unsqueeze(1), h6[:, 72].unsqueeze(1)), axis = 1)
-        hNL = self.LN(hNL).view(-1, self.d_model * 3)
-        hNL = self.fcHln(hNL) 
-        h1 = F.relu(self.fc1(hT + hNL))
+        hS = mid_hidden
+        Z = torch.cat((self.emb_tokens(torch.tensor([0]*b).view(-1, 1).cuda()), hL.view(-1, 30, self.d_model), self.emb_tokens(torch.tensor([1]*b).view(-1, 1).cuda()), hN.view(-1, 40, self.d_model), self.emb_tokens(torch.tensor([2]*b).view(-1, 1).cuda()), hE.view(-1, 30, self.d_model)), 1)
+        Z = self.transformer_encoder1(Z, None)
+        Z = Z.view(b, 103, self.d_model)
+        hC = torch.concat((Z[:, 0].unsqueeze(1), Z[:, 31].unsqueeze(1), Z[:, 72].unsqueeze(1)), axis = 1)
+        hX = self.LN(hC).view(-1, self.d_model * 3)
+        hX = self.fcHln(hX) 
+        h1 = F.relu(self.fc1(hS + hX))
         h2 = self.fc2(h1)
-        return self.act(h2), logp, hT, hNL
+        return self.act(h2), logp, hS, hX
 
 
 
