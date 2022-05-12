@@ -15,6 +15,20 @@ from transformers import BertTokenizer, BertModel
 import numpy as np
 import sys
 
+class MILNCELoss(torch.nn.Module):
+    def __init__(self):
+        super(MILNCELoss, self).__init__()
+
+    def forward(self, video_embd, text_embd):
+        x = torch.matmul(video_embd, text_embd.t())
+        nominator = x * torch.eye(x.shape[0])[:,:].cuda()    
+        nominator = nominator.sum(dim=1) #--> [B]
+
+        #cat([B, B] [B, B])--> [B, 2B] 
+        denominator = torch.cat((x, x.permute(1,0)), dim=1) #--> [B, 2B]
+        denominator = torch.logsumexp(denominator, dim=1) #--> [B]
+        return torch.mean(denominator - nominator)
+    
 class PositionalEncoding(nn.Module):
 
     def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
@@ -47,10 +61,7 @@ class MODEL(nn.Module):
         self.eos_idx = 102
         self.pad_idx = 0
         self.unk_idx = 100
-
         self.max_sequence_length = 50
-
-        # embedding
         self.embedding_size = 768 
         self.d_model = self.embedding_size 
 
@@ -59,28 +70,20 @@ class MODEL(nn.Module):
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         self.embedding = bertmodel.embeddings
 
-        # Neighborhood Embedding
         self.latent_size = latent_size
         self.emb_tokens = nn.Embedding(5, self.d_model)
         self.emb_b = nn.Embedding(5, self.latent_size) #borough 
         self.emb_n = nn.Embedding(220, self.latent_size) #neighborhood
-
-        #Amenity Embedding
         self.emb_a = nn.Embedding(100, self.latent_size, padding_idx=0)
 
         self.fcN1 = nn.Linear(8, self.d_model)
         self.fcN2 = nn.Linear(self.d_model, self.d_model * 40)
-        
         self.fc1 = nn.Linear(self.d_model, latent_size) 
         self.fc2 = nn.Linear(latent_size, 1)
-        
         self.fcT = nn.Linear(self.embedding_size, self.latent_size)
-        
         self.fcE1 = nn.Linear(latent_size, self.d_model)
-
         self.fcL1 = nn.Linear(latent_size, self.d_model)
         self.fcL2 = nn.Linear(self.d_model, self.d_model * 30)
-
         self.act = nn.Sigmoid()
 
         d_model = self.embedding_size
@@ -100,6 +103,7 @@ class MODEL(nn.Module):
 
         self.LN = nn.LayerNorm(self.d_model) 
         self.fcHln = nn.Linear(self.d_model * 3, self.d_model) 
+        
     def forward(self, x, xb, xn, x_input, x_len, xa, src_mask):
 
         length = x_len
@@ -122,37 +126,20 @@ class MODEL(nn.Module):
 
         hE = self.emb_a(xa) #[B, amenity_len, latent_size]
         hE = self.fcE1(hE)
-
         hN = self.fcN1(x)
         hN = self.fcN2(hN)
-
         hL = self.fcL1(self.emb_b(xb) + self.emb_n(xn))
         hL = self.fcL2(hL)
-
         hT = mid_hidden
-
         h6 = torch.cat((self.emb_tokens(torch.tensor([0]*b).view(-1, 1).cuda()), hL.view(-1, 30, self.d_model), self.emb_tokens(torch.tensor([1]*b).view(-1, 1).cuda()), hN.view(-1, 40, self.d_model), self.emb_tokens(torch.tensor([2]*b).view(-1, 1).cuda()), hE.view(-1, 30, self.d_model)), 1)
         h6 = self.transformer_encoder1(h6, None)
         h6 = h6.view(b, 103, self.d_model)
         hNL = torch.concat((h6[:, 0].unsqueeze(1), h6[:, 31].unsqueeze(1), h6[:, 72].unsqueeze(1)), axis = 1)
         hNL = self.LN(hNL).view(-1, self.d_model * 3)
         hNL = self.fcHln(hNL) 
-
         h1 = F.relu(self.fc1(hT + hNL))
         h2 = self.fc2(h1)
         return self.act(h2), logp, hT, hNL
 
-class MILNCELoss(torch.nn.Module):
-    def __init__(self):
-        super(MILNCELoss, self).__init__()
 
-    def forward(self, video_embd, text_embd):
-        x = torch.matmul(video_embd, text_embd.t())
-        nominator = x * torch.eye(x.shape[0])[:,:].cuda()    
-        nominator = nominator.sum(dim=1) #--> [B]
-
-        #cat([B, B] [B, B])--> [B, 2B] 
-        denominator = torch.cat((x, x.permute(1,0)), dim=1) #--> [B, 2B]
-        denominator = torch.logsumexp(denominator, dim=1) #--> [B]
-        return torch.mean(denominator - nominator)
 
