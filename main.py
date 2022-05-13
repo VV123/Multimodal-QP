@@ -19,7 +19,6 @@ import re
 from model import MILNCELoss, MODEL
 
 
-
 def loss_fn(logp, target, length):
     target = target[:, :torch.max(length).data.item()].contiguous().view(-1)
     logp = logp[:, :torch.max(length).data.item()].contiguous()
@@ -31,47 +30,12 @@ def loss_fn(logp, target, length):
 def generate_square_subsequent_mask(sz: int) -> Tensor:
     """Generates an upper-triangular matrix of -inf, with zeros on diag."""
     return torch.triu(torch.ones(sz, sz) * float('-inf'), diagonal=1)
-
-def test(X_test, Xb_test, Xa_test, Xn_test, X_input_test, X_len_test, y_test, name='test'):
-    model.eval()
-    num_batch = int((len(y_test) + BATCH_SIZE)/BATCH_SIZE)
-    total_loss = 0 
-    Ybar = []
-    for i in range(num_batch):
-        sys.stdout.write('\r{0}/{1}'.format(i, num_batch))
-        st = i * BATCH_SIZE
-        ed = min((i+1)*BATCH_SIZE, len(y_test))
-
-        x = torch.Tensor(X_test[st:ed]).to(device)
-        xa = torch.from_numpy(Xa_test[st:ed]).to(device)
-        xb = torch.from_numpy(Xb_test[st:ed]).to(device)
-        xn = torch.from_numpy(Xn_test[st:ed]).to(device)
-        x_input = torch.from_numpy(X_input_test[st:ed]).to(device)
-        x_len = torch.from_numpy(X_len_test[st:ed]).to(device)
-        y = torch.Tensor(y_test[st:ed]).to(device)
-
-        src_mask = generate_square_subsequent_mask(args.textLen).to(device)
-        ybar, logp, ebd1, ebd2 = model(x, xb, xn, x_input, x_len, xa, src_mask)
-        aeloss = loss_fn(logp, x_input, x_len)
-        ybar = torch.squeeze(ybar, 1)
-        nceloss = nce_criterion(ebd1, ebd2)
-        loss = nceloss + alpha * aeloss
-        ybar = ybar.to('cpu')
-        Ybar.extend(ybar.data.numpy())
-        total_loss += loss.item()
-    Ybar = np.array(Ybar)
-    assert len(y_test) == len(Ybar)
-    rmse = np.sqrt(mean_squared_error(y_test*(max_y-min_y) + min_y, Ybar*(max_y-min_y) + min_y))
-    mae = mean_absolute_error(y_test*(max_y-min_y) + min_y, Ybar*(max_y-min_y) + min_y)
-    print('{0}: total loss: {1:.4f}, RMSE {2:.4f}, MAE {3:.4f}'.format(name, total_loss, rmse, mae))
-
-    return total_loss, rmse, y_test*(max_y-min_y)+min_y, Ybar*(max_y-min_y)+min_y
     
 def train(X_train, Xb_train, Xa_train, Xn_train, X_input_train, X_len_train, y_train, name='train'):
     model.train()
     num_batch = int((len(y_train) + BATCH_SIZE)/BATCH_SIZE)
     total_loss = 0 
-    Ybar = []
+
     for i in range(num_batch):
         sys.stdout.write('\r{0}/{1}'.format(i, num_batch))
         st = i * BATCH_SIZE
@@ -89,10 +53,8 @@ def train(X_train, Xb_train, Xa_train, Xn_train, X_input_train, X_len_train, y_t
 
         aeloss = loss_fn(logp, x_input, x_len)
         nceloss = nce_criterion(ebd1, ebd2)
-        ybar = torch.squeeze(ybar, 1)
-        loss = nceloss + alpha * aeloss
-        ybar = ybar.to('cpu')
-        Ybar.extend(ybar.data.numpy())
+        loss = nceloss + 10.0 * aeloss
+        
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
@@ -101,16 +63,12 @@ def train(X_train, Xb_train, Xa_train, Xn_train, X_input_train, X_len_train, y_t
                 epoch, ed, len(y_train),
                 100.0 * ed / len(y_train), loss.item()))
 
-    Ybar = np.array(Ybar)
-    rmse = np.sqrt(mean_squared_error(y_train*(max_y-min_y)+min_y, Ybar*(max_y-min_y)+min_y))
-    mae = mean_absolute_error(y_train*(max_y-min_y)+min_y, Ybar*(max_y-min_y)+min_y)
-    print('====> Epoch: {0} total loss: {1:.4f}, RMSE: {2:.4f}, MAE {3:.4f}'.format(epoch, total_loss, rmse, mae))
+    print('====> Epoch: {0} total loss: {1:.4f}.'.format(epoch, total_loss))
 
 def test_emb(X, Xb, Xa, Xn, X_input, X_len, y, name='emb'):
     model.eval()
     num_batch = int((len(y) + BATCH_SIZE)/BATCH_SIZE)
     total_loss = 0 
-    Ybar = []
     EBD1, EBD2 = [], []
     for i in range(num_batch):
         sys.stdout.write('\r{0}/{1}'.format(i, num_batch))
@@ -124,23 +82,18 @@ def test_emb(X, Xb, Xa, Xn, X_input, X_len, y, name='emb'):
         x_input = torch.from_numpy(X_input[st:ed]).to(device)
         x_len = torch.from_numpy(X_len[st:ed]).to(device)
      
-
         src_mask = generate_square_subsequent_mask(args.textLen).to(device)
-        ybar, logp, ebd1, ebd2 = model(x, xb, xn, x_input, x_len, xa, src_mask)
+        _, logp, ebd1, ebd2 = model(x, xb, xn, x_input, x_len, xa, src_mask)
         aeloss = loss_fn(logp, x_input, x_len)
         nceloss = nce_criterion(ebd1, ebd2)
-        ybar = torch.squeeze(ybar, 1)
-        loss = nceloss
-        Ybar.extend(ybar.to('cpu').data.numpy())
+        loss = nceloss + 10.0 * aeloss
         EBD1.extend(ebd1.to('cpu').data.numpy())
         EBD2.extend(ebd2.to('cpu').data.numpy())
         total_loss += loss.item()
         
-    Ybar = np.array(Ybar)
     EBD1 = np.array(EBD1)
     EBD2 = np.array(EBD2)
 
-    assert len(y) == len(Ybar)
     print('{0}: total loss: {1:.4f}'.format(name, total_loss))
 
     return EBD1, EBD2
@@ -208,7 +161,6 @@ if __name__ == '__main__':
     
     X_train, Xb_train, Xa_train, Xn_train, X_input_train, X_len_train, X_id_train, y_train, X_test, Xb_test, Xa_test, Xn_test, X_input_test, X_len_test, X_id_test, y_test, X_val, Xb_val, Xa_val, Xn_val, X_input_val, X_len_val, X_id_val, y_val = loaddata(load=args.loaddata, amenity_len=args.amenLen)
 
-
     X_all = np.concatenate((X_train, X_val, X_test), axis=0)
     Xb_all = np.concatenate((Xb_train, Xb_val, Xb_test), axis=0)
     Xa_all = np.concatenate((Xa_train, Xa_val, Xa_test), axis=0)
@@ -218,9 +170,6 @@ if __name__ == '__main__':
     X_id_all = np.concatenate((X_id_train, X_id_val, X_id_test), axis=0)
     y_all = np.concatenate((y_train, y_val, y_test), axis=0)
 
-    X_train, Xb_train, Xa_train, Xn_train, X_input_train, X_len_train, X_id_train, y_train = X_all, Xb_all, Xa_all, Xn_all, X_input_all, X_len_all, X_id_all, y_all
-    
-
     max_y, min_y = 300, 30
     alpha = 10
     if args.mode == 'train':
@@ -228,30 +177,22 @@ if __name__ == '__main__':
         if args.loadmodel:
             model.load_state_dict(torch.load(args.path))
         model.to(device)
-        min_loss = 100000000
+        min_loss = float('inf')
         optimizer = Adam(model.parameters(), lr=0.0001)
         for epoch in range(EPOCH):
-            #manual shuffle
-            n_sample = len(y_train)
+            # shuffle
+            n_sample = len(y_all)
             ind = np.arange(n_sample)
             np.random.seed()
             np.random.shuffle(ind)
-            X_train = X_train[ind]
-            y_train = y_train[ind]
-            Xb_train = Xb_train[ind]
-            Xn_train = Xn_train[ind]
-            X_input_train = X_input_train[ind]
-            X_len_train = X_len_train[ind]
-            Xa_train = Xa_train[ind]
-            train(X_train, Xb_train, Xa_train, Xn_train, X_input_train, X_len_train, y_train)
-            
-            if (epoch+1)%5==0:
-                test(X_test, Xb_test, Xa_test, Xn_test, X_input_test, X_len_test, y_test, 'Test')
-                loss, rmse, _, _ = test(X_val, Xb_val, Xa_val, Xn_val, X_input_val, X_len_val, y_val, 'Validation')
-                if True or loss < min_loss:
-                    min_loss = loss
-                    torch.save(model.state_dict(), args.path)
-                    print('Model saved!') 
+            X_all = X_all[ind]
+            y_all = y_all[ind]
+            Xb_all = Xb_all[ind]
+            Xn_all = Xn_all[ind]
+            X_input_all = X_input_all[ind]
+            X_len_all = X_len_all[ind]
+            Xa_all = Xa_all[ind]
+            train(X_all, Xb_all, Xa_all, Xn_all, X_input_all, X_len_all, y_all)
  
     elif args.mode == 'infer':
         model = MODEL(64)
@@ -261,14 +202,11 @@ if __name__ == '__main__':
             model.load_state_dict(torch.load(args.path))
         model.to(device)
 
-        test(X_train, Xb_train, Xa_train, Xn_train, X_input_train, X_len_train, y_train, 'Train')
-        EBD1, EBD2 = test_emb(X_train, Xb_train, Xa_train, Xn_train, X_input_train, X_len_train, y_train)
+        EBD1, EBD2 = test_emb(X_all, Xb_all, Xa_all, Xn_all, X_input_all, X_len_all, y_all)
         
         metrics = compute_metrics(np.dot(EBD1, EBD2.T))
-        print(metrics)
         metrics = compute_metrics(np.dot(EBD2, EBD1.T))
-        print(metrics)
-        SVM(EBD1, y_train, des='text')
-        SVM(EBD2, y_train, des='multimodal')
+        SVM(EBD1, y_all, des='text')
+        SVM(EBD2, y_all, des='multimodal')
       
    
