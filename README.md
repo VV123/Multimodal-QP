@@ -1,4 +1,4 @@
-# Unsupervised Pre-training for Semantic Multimodal Learning
+# Multimodal query and prediction
 
 ## Dependencies
 
