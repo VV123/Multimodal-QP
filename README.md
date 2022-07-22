@@ -4,6 +4,11 @@
 
 - python3
 
+## Data
+
+- [Raw data](http://insideairbnb.com/get-the-data/)
+- [Processed data](https://drive.google.com/drive/folders/1eZnSlu-7zhKRUrZiOBEcJOFhY4GlOuGH?usp=sharing)
+
 ## Command
 
 ```
